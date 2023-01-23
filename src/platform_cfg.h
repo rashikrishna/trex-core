@@ -108,6 +108,7 @@ struct CMacYamlInfo {
     uint16_t m_vlan;
     mpls_tag_t m_mpls={0};
     bool m_is_eompls=0;
+    qinq_tag m_qinq={0};
     void Dump(FILE *fd);
 
     void copy_dest(char *p);
@@ -117,6 +118,7 @@ struct CMacYamlInfo {
     uint32_t get_vlan();
     mpls_tag_t get_mpls();
     bool get_is_eompls();
+    qinq_tag get_qinq();
     uint32_t get_mask();
 
     void dump_mac_vector( std::vector<uint8_t> & v,FILE *fd){

@@ -487,7 +487,9 @@ void       CFlowTable::generate_rst_pkt(CPerProfileCtx * pctx,
                                  dst_port,
                                  tunnel_data,
                                  is_ipv6,
-                                 NULL);
+                                 NULL,
+                                 0,
+                                 0);
     if (flow==0) {
         return;
     }
@@ -704,17 +706,22 @@ bool CFlowTable::rx_handle_packet_udp_no_flow(CTcpPerThreadCtx * ctx,
 
     /* TBD Parser need to be fixed */
     tunnel_cfg_data_t tunnel_data;
-    if (parser.m_vlan_offset) {
-        VLANHeader * lpVlan=(VLANHeader *)(pkt+14+parser.m_mpls_offset);
-        tunnel_data.m_vlan = lpVlan->getVlanTag();
-    }
-
     if (parser.m_mpls_offset !=0) {
         MPLSHeader *lpMpls = (MPLSHeader *)(pkt + 14);
         tunnel_data.m_mpls.label = lpMpls->getLabel();
         tunnel_data.m_mpls.tc = lpMpls->getTc();
         tunnel_data.m_mpls.s = lpMpls->getBottomOfStack();
         tunnel_data.m_mpls.ttl = lpMpls->getTtl();
+    }
+    
+    if (parser.m_vlan_offset==4) {
+        VLANHeader * lpVlan=(VLANHeader *)(pkt+14);
+        tunnel_data.m_vlan = lpVlan->getVlanTag();
+    } else if (parser.m_vlan_offset==8) {
+        VLANHeader * lpVlan=(VLANHeader *)(pkt+14);
+        tunnel_data.m_qinq.outer_vlan = lpVlan->getVlanTag();
+        lpVlan = (VLANHeader *)(lpVlan+4);
+        tunnel_data.m_qinq.inner_vlan = lpVlan->getVlanTag();
     }
 
     uint16_t dst_port = lpUDP->getDestPort();
@@ -832,10 +839,6 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
 
     /* TBD Parser need to be fixed */
     tunnel_cfg_data_t tunnel_data;
-    if (parser.m_vlan_offset) {
-        VLANHeader * lpVlan=(VLANHeader *)(pkt+14+parser.m_mpls_offset);
-        tunnel_data.m_vlan = lpVlan->getVlanTag();
-    }
 
     if (parser.m_mpls_offset !=0) {
         MPLSHeader *lpMpls = (MPLSHeader *)(pkt + 14);
@@ -843,6 +846,15 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
         tunnel_data.m_mpls.tc = lpMpls->getTc();
         tunnel_data.m_mpls.s = lpMpls->getBottomOfStack();
         tunnel_data.m_mpls.ttl = lpMpls->getTtl();
+    }
+    if (parser.m_vlan_offset == 4) {
+        VLANHeader * lpVlan=(VLANHeader *)(pkt+14);
+        tunnel_data.m_vlan = lpVlan->getVlanTag();
+    } else if (parser.m_vlan_offset==8) {
+        VLANHeader * lpVlan=(VLANHeader *)(pkt+14);
+        tunnel_data.m_qinq.outer_vlan = lpVlan->getVlanTag();
+        lpVlan = (VLANHeader *)(pkt+18);
+        tunnel_data.m_qinq.inner_vlan = lpVlan->getVlanTag();
     }
 
     uint16_t dst_port = lpTcp->getDestPort();
@@ -1042,7 +1054,6 @@ bool CFlowTable::rx_handle_packet_tcp_no_flow(CTcpPerThreadCtx * ctx,
 
     /* process SYN packet */
     process_tcp_packet(ctx,lptflow,mbuf,lpTcp,ftuple);
-
     return(true);
 }
 

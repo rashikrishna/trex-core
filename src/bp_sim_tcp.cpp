@@ -390,6 +390,7 @@ static CEmulAppApiUdpImpl  m_udp_bh_api_impl_c;
 
 #ifndef TREX_SIM
 uint16_t get_client_side_vlan(CVirtualIF * _ifs);
+qinq_tag get_client_side_qinq(CVirtualIF * _ifs);
 tunnel_cfg_data_t get_client_side_tunnel_cfg_data(CVirtualIF * _ifs);
 #endif
 void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id, CFlowBase* in_flow){
@@ -451,9 +452,11 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
     if (lpc) {
         if (lpc->m_initiator.has_vlan()){
             tunnel_data.m_vlan = lpc->m_initiator.get_vlan();
+
+        } else if (lpc->m_initiator.has_qinq()) {
+            tunnel_data.m_qinq = lpc->m_initiator.get_qinq();
         }
-    }else{
-        if ( unlikely(CGlobalInfo::m_options.preview.get_vlan_mode() != CPreviewMode::VLAN_MODE_NONE) ) {
+    }else { if ( unlikely(CGlobalInfo::m_options.preview.get_vlan_mode() != CPreviewMode::VLAN_MODE_NONE) ) {
     #ifndef TREX_SIM
             tunnel_data = get_client_side_tunnel_cfg_data(m_node_gen.m_v_if);
     #endif
@@ -496,6 +499,7 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
                                           tg_id,
                                           template_id);
     }
+
 
     #ifdef RSS_DEBUG 
     printf(" (%s) (%d) generated tuple %x:%x:%x:%x \n",__func__,m_thread_id,tuple.getClient(),tuple.getServer(),tuple.getClientPort(),tuple.getServerPort());

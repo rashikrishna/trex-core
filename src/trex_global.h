@@ -93,6 +93,7 @@ public:
         VLAN_MODE_NONE = 0,
         VLAN_MODE_NORMAL = 1,
         VLAN_MODE_LOAD_BALANCE = 2,
+        QINQ_MODE_NORMAL = 3,
         MPLS_MODE_NORMAL = 4,
         EoMPLS_MODE_NORMAL = 5,
         EoMPLS_WITH_VLAN_MODE = 6,
@@ -501,9 +502,11 @@ public:
 typedef struct tunnel_cfg_data_t{
     uint16_t m_vlan;
     mpls_tag_t m_mpls;
+    qinq_tag m_qinq;
     tunnel_cfg_data_t() {
         m_vlan = 0;
         m_mpls = {0};
+        m_qinq = {0};
     }
 } tunnel_cfg_data_t;
 
@@ -514,6 +517,7 @@ class CPerPortIPCfg {
     uint32_t get_def_gw() {return m_def_gw;}
     uint32_t get_vlan() {return m_tunnel_cfg_data.m_vlan;}
     mpls_tag_t get_mpls() {return m_tunnel_cfg_data.m_mpls;}
+    qinq_tag get_qinq() {return m_tunnel_cfg_data.m_qinq;}
     tunnel_cfg_data_t get_tunnel_cfg_data() {return m_tunnel_cfg_data;}
     bool get_vxlan_fs() {return m_vxlan_fs;}
     void set_ip(uint32_t val) {m_ip = val;}
@@ -521,6 +525,7 @@ class CPerPortIPCfg {
     void set_def_gw(uint32_t val) {m_def_gw = val;}
     void set_vlan(uint16_t val) {m_tunnel_cfg_data.m_vlan = val;}
     void set_mpls(mpls_tag_t val) {m_tunnel_cfg_data.m_mpls = val;}
+    void set_qinq(qinq_tag val) {m_tunnel_cfg_data.m_qinq = val;}
     void set_tunnel_cfg_data(tunnel_cfg_data_t val) {m_tunnel_cfg_data = val;}
     void set_vxlan_fs(bool val) {m_vxlan_fs = val;}
  private:
@@ -576,6 +581,7 @@ public:
         m_ip_cfg->set_mask(0);
         m_ip_cfg->set_def_gw(0);
         m_ip_cfg->set_vlan(0);
+        m_ip_cfg->set_qinq({0});
         m_ip_cfg->set_vxlan_fs(false);
         m_latency_rate = 0;
         m_latency_mask = 0xffffffff;

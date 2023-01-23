@@ -1624,6 +1624,8 @@ void CFlowTemplate::build_template_ip(CPerProfileCtx * pctx,
 
         if (m_tunnel_data.m_vlan){
             vlan_offset=4;
+        } else if (m_tunnel_data.m_qinq.inner_vlan!=0 && m_tunnel_data.m_qinq.outer_vlan!=0) {
+            vlan_offset=8;
         }
         m_offset_ip  = 14+vlan_offset + mpls_offset;
         m_offset_l4 = m_offset_ip + 20;
@@ -1655,13 +1657,27 @@ void CFlowTemplate::build_template_ip(CPerProfileCtx * pctx,
             memcpy(p+18, default_ipv4_header,ETH_HDR_LEN);
         }
 
-        if(vlan_offset==4){
+        // For VLAN
+        if (vlan_offset==4){
             const uint8_t next_vlan[2]={0x81,00};
             memcpy(p+12+tunnel_offset,next_vlan,2);
             VLANHeader vlan_head;
             vlan_head.setVlanTag(m_tunnel_data.m_vlan);
             vlan_head.setNextProtocolFromHostOrder(0x0800);
             memcpy(p+14+tunnel_offset,vlan_head.getPointer(),4);
+        } else if(vlan_offset==8) {
+            // Set outer VLAN
+            const uint8_t next_vlan[2]={0x81,00};
+            memcpy(p+12+tunnel_offset,next_vlan,2);
+            VLANHeader vlan_head;
+            vlan_head.setVlanTag(m_tunnel_data.m_qinq.outer_vlan);
+            vlan_head.setNextProtocolFromHostOrder(0x8100);
+            memcpy(p+14+tunnel_offset,vlan_head.getPointer(),4);
+
+            // Set inner VLAN
+            vlan_head.setVlanTag(m_tunnel_data.m_qinq.inner_vlan);
+            vlan_head.setNextProtocolFromHostOrder(0x0800);
+            memcpy(p+18+tunnel_offset,vlan_head.getPointer(), 4);
         }
         memcpy(p+m_offset_ip,default_ipv4_header+14,sizeof(default_ipv4_header)-14);
         /* set default value */
@@ -1682,6 +1698,11 @@ void CFlowTemplate::build_template_ip(CPerProfileCtx * pctx,
             } else if (CGlobalInfo::m_options.preview.get_vlan_mode() == CPreviewMode::EoMPLS_MODE_NORMAL || CGlobalInfo::m_options.preview.get_vlan_mode() == CPreviewMode::EoMPLS_WITH_VLAN_MODE) {
                 mpls_offset=4+ETH_HDR_LEN;
             }
+        }                                                                         
+        if (m_tunnel_data.m_vlan){
+            vlan_offset=4;
+        } else if (m_tunnel_data.m_qinq.inner_vlan!=0 && m_tunnel_data.m_qinq.outer_vlan!=0) {
+            vlan_offset=8;
         }
 
         if (m_tunnel_data.m_vlan) {
@@ -1716,8 +1737,22 @@ void CFlowTemplate::build_template_ip(CPerProfileCtx * pctx,
         if (mpls_offset == 4+ETH_HDR_LEN) {
             memcpy(p+18, default_ipv6_header,ETH_HDR_LEN);
         }
+        if(vlan_offset==8){
+            // Set outer VLAN
+            const uint8_t next_vlan[2]={0x81,00};
+            memcpy(p+12,next_vlan,2);
+            VLANHeader vlan_head;
+            vlan_head.setVlanTag(m_tunnel_data.m_qinq.outer_vlan);
+            vlan_head.setNextProtocolFromHostOrder(0x8100);
+            memcpy(p+14,vlan_head.getPointer(),4);
 
-        if(vlan_offset==4){
+            // Set inner VLAN
+            vlan_head.setVlanTag(m_tunnel_data.m_qinq.inner_vlan);
+            vlan_head.setNextProtocolFromHostOrder(0x86dd);
+            memcpy(p+18,vlan_head.getPointer(), 4);
+            memcpy(p+22,default_ipv6_header+14,sizeof(default_ipv6_header)-14);
+        }else if (vlan_offset==4){
+            memcpy(p,default_ipv6_header,sizeof(12));
             const uint8_t next_vlan[2]={0x81,00};
             memcpy(p+12+tunnel_offset,next_vlan,2);
             VLANHeader vlan_head;

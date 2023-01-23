@@ -1854,6 +1854,13 @@ COLD_FUNC uint16_t get_client_side_vlan(CVirtualIF * _ifs){
     return(vlan);
 }
 
+COLD_FUNC qinq_tag get_client_side_qinq(CVirtualIF * _ifs){
+    CCoreEthIFTcp * lpif=(CCoreEthIFTcp *)_ifs;
+    CCorePerPort *lp_port = (CCorePerPort *)lpif->get_ports();
+    uint8_t port_id = lp_port->m_port->get_tvpid();
+    qinq_tag qinq=CGlobalInfo::m_options.m_ip_cfg[port_id].get_qinq();
+    return(qinq);
+}
 
 COLD_FUNC tunnel_cfg_data_t get_client_side_tunnel_cfg_data(CVirtualIF * _ifs){
     CCoreEthIFTcp * lpif=(CCoreEthIFTcp *)_ifs;
@@ -2525,6 +2532,8 @@ CPortLatencyHWBase::apply_hw_vlan(rte_mbuf_t *m, uint8_t port_id) {
             add_vlan(m, CGlobalInfo::m_options.m_vlan_port[0]);
         } else if (vlan_mode == CPreviewMode::VLAN_MODE_NORMAL) {
             add_vlan(m, CGlobalInfo::m_options.m_ip_cfg[port_id].get_vlan());
+        } else if (vlan_mode == CPreviewMode::QINQ_MODE_NORMAL) {
+            add_qinq(m, CGlobalInfo::m_options.m_ip_cfg[port_id].get_qinq().inner_vlan, CGlobalInfo::m_options.m_ip_cfg[port_id].get_qinq().outer_vlan);
         }
     }
 }
@@ -4009,7 +4018,7 @@ COLD_FUNC TrexSTXCfg
  CGlobalTRex::get_stx_cfg() {
 
     TrexSTXCfg cfg;
-    
+
     /* control plane config */
     cfg.m_rpc_req_resp_cfg.create(TrexRpcServerConfig::RPC_PROT_TCP,
                                   global_platform_cfg_info.m_zmq_rpc_port,
@@ -6334,9 +6343,11 @@ COLD_FUNC int update_global_info_from_platform_file(){
             g_opts->m_ip_cfg[i].set_mask(cg->m_mac_info[i].get_mask());
             g_opts->m_ip_cfg[i].set_vlan(cg->m_mac_info[i].get_vlan());
             g_opts->m_ip_cfg[i].set_mpls(cg->m_mac_info[i].get_mpls());
+            g_opts->m_ip_cfg[i].set_qinq(cg->m_mac_info[i].get_qinq());
+
             // If one of the ports has vlan, work in vlan mode
             if (cg->m_mac_info[i].get_vlan() != 0) {
-                // Check if MPLS configuration also specified, tunnel in tunnel EoMPLS[vlan]
+               // Check if MPLS configuration also specified, tunnel in tunnel EoMPLS[vlan]
                 if (cg->m_mac_info[i].get_mpls().label && !cg->m_mac_info[i].get_is_eompls()) {
                     printf("\n");
                     printf("Error: Both MPLS and VLAN configuration is not allowed. Please remove one of them and try again.\n");
@@ -6350,6 +6361,9 @@ COLD_FUNC int update_global_info_from_platform_file(){
             } else if (cg->m_mac_info[i].get_mpls().label) {
                 // Currenlty with MPLS Simple MPLS and EoMPLS supported
                 g_opts->preview.set_vlan_mode_verify(cg->m_mac_info[i].get_is_eompls() ? CPreviewMode::EoMPLS_MODE_NORMAL : CPreviewMode::MPLS_MODE_NORMAL);
+            } else if (cg->m_mac_info[i].get_qinq().inner_vlan !=0 && cg->m_mac_info[i].get_qinq().outer_vlan !=0) {
+                // Check if the ports have both outer and inner vlan, i.e QinQ
+                g_opts->preview.set_vlan_mode_verify(CPreviewMode::QINQ_MODE_NORMAL);
             }
         }
     }
@@ -7758,14 +7772,20 @@ HOT_FUNC  int CCoreEthIF::send_node(CGenNode * node) {
                 /* both from the same dir but with VLAN0 */
                 vlan_id = CGlobalInfo::m_options.m_vlan_port[0];
             }
+            add_vlan(m, vlan_id);
         } else if (CGlobalInfo::m_options.preview.get_vlan_mode()
             == CPreviewMode::VLAN_MODE_NORMAL) {
             CCorePerPort *lp_port = &m_ports[dir];
             uint8_t port_id = lp_port->m_port->get_tvpid();
             vlan_id = CGlobalInfo::m_options.m_ip_cfg[port_id].get_vlan();
+            add_vlan(m, vlan_id);
+        } else if (CGlobalInfo::m_options.preview.get_vlan_mode()
+            == CPreviewMode::QINQ_MODE_NORMAL) {
+            CCorePerPort *lp_port = &m_ports[dir];
+            uint8_t port_id = lp_port->m_port->get_tvpid();
+            qinq_tag qinq = CGlobalInfo::m_options.m_ip_cfg[port_id].get_qinq();
+            add_qinq(m, qinq.inner_vlan, qinq.outer_vlan);
         }
-
-        add_vlan(m, vlan_id);
     }
 
     if (single_port){
