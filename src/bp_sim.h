@@ -2424,6 +2424,10 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
         }
         else {
             IPHeader* tunnel_ip = (IPHeader*)(p + m_pkt_indication.m_tunnel_ip_offset);
+            if (tunnel_ip->getNextProtocol() == IPHeader::Protocol::GRE)
+            {
+                ip_addr_offset = 0;
+            }
             tunnel_ip->updateIpSrc(PKT_NTOHL(tunnel_ip->mySource) + ip_addr_offset);
             tunnel_ip->updateIpDst(PKT_NTOHL(tunnel_ip->myDestination) + ip_addr_offset);
         }
