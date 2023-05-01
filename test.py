@@ -4,6 +4,11 @@
 # the yaml file
 # Once that is created we can use it to run trex manually.
 
+# Steps to create private build
+#  cd /home/rakrishna/build
+# tar -hcf trex_v3.02_set_constant_outermost_ip_in_case_of_tunnels.tar.gz -C  /home/rakrishna/gitrepos/trex_github/trex-core/scripts/ . 
+
+
 from trex import connect, flow_get, profile_get
 
 
