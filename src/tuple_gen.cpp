@@ -619,6 +619,17 @@ void operator >> (const YAML::Node& node, CTupleGenYamlInfo & fi) {
         UTL_YAML_READ(ip_addr, clients_end, c_pool.m_ip_end);
         UTL_YAML_READ(ip_addr, servers_start, s_pool.m_ip_start);
         UTL_YAML_READ(ip_addr, servers_end, s_pool.m_ip_end);
+        UTL_YAML_READ(uint32, gtpu_bearer_num, CGlobalInfo::m_options.m_teid_increment);
+        if (c_pool.m_ip_start <= CGlobalInfo::m_options.m_min_client_ip)
+        {
+            CGlobalInfo::m_options.m_min_client_ip = c_pool.m_ip_start;
+        }
+        if (s_pool.m_ip_start <= CGlobalInfo::m_options.m_min_server_ip)
+        {
+            CGlobalInfo::m_options.m_min_server_ip = s_pool.m_ip_start;
+        }
+        CGlobalInfo::m_options.m_total_client_ip = c_pool.m_ip_end - c_pool.m_ip_start;
+        CGlobalInfo::m_options.m_total_server_ip = s_pool.m_ip_end - s_pool.m_ip_start;
         read_tuple_para(node, c_pool);
         s_pool.m_dual_interface_mask = c_pool.m_dual_interface_mask;
         s_pool.m_is_bundling = false;

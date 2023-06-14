@@ -1877,9 +1877,14 @@ public:
     uint8_t             m_pad1;
     uint16_t            m_ro_mbuf_size;    /* the size of the const mbuf, zero if does not exist */
 
+    // uint32_t            m_teid_increment;
+    uint32_t            m_flow_number;
+
 public:
 
-    CPacketIndication() : m_tunnel_ip_offset(0), m_ip_offset(0) {}
+    // CPacketIndication() : m_tunnel_ip_offset(0), m_ip_offset(0), m_teid_increment(3), m_flow_number(0) {}
+    CPacketIndication() : m_tunnel_ip_offset(0), m_ip_offset(0), m_flow_number(0) {}
+    // CPacketIndication() : m_tunnel_ip_offset(0), m_ip_offset(0) {}
     void Dump(FILE *fd,int verbose);
     void Clean();
     bool ConvertPacketToIpv6InPlace(CCapPktRaw * pkt,
@@ -2416,7 +2421,8 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
     
     if (m_pkt_indication.m_tunnel_ip_offset != 0) {
         // Update tunnel IPs
-        uint32_t ip_addr_offset = node->m_src_ip % m_pkt_indication.m_desc.GetMaxIpTunnels();
+        // Tunnel IPs will now start from the initial tunnel IP set in the PCAP
+        uint32_t ip_addr_offset = (node->m_src_ip - CGlobalInfo::m_options.m_min_client_ip) % CGlobalInfo::m_options.m_total_client_ip;
         if (unlikely(m_pkt_indication.m_is_ipv6_tunnel)) {
             IPv6Header* tunnel_ip = (IPv6Header*)(p + m_pkt_indication.m_tunnel_ip_offset);
             tunnel_ip->updateLSBIpv6Src(PKT_NTOHL(*(uint32_t*)&tunnel_ip->mySource[6]) + ip_addr_offset);
@@ -2518,16 +2524,43 @@ inline void CFlowPktInfo::update_pkt_info(char *p,
         } else {
             bool keep_src_ip = m_pkt_indication.m_desc.isKeepSrcIP();
             bool keep_dst_ip = m_pkt_indication.m_desc.isKeepDstIP();
-            uint32_t new_ip;
+            uint32_t new_src_ip, start_ip, total_ip;
             bool is_client_dir = (ip_dir ==  CLIENT_SIDE);
 
             if ( likely(!keep_src_ip) ) {
-                new_ip = is_client_dir ? node->m_src_ip : node->m_dest_ip;
-                ipv4->updateIpSrc(new_ip);
+                new_src_ip = is_client_dir ? node->m_src_ip : node->m_dest_ip;
+                total_ip = is_client_dir ? CGlobalInfo::m_options.m_total_client_ip : CGlobalInfo::m_options.m_total_server_ip;
+                start_ip = is_client_dir ? CGlobalInfo::m_options.m_min_client_ip : CGlobalInfo::m_options.m_min_server_ip;
+                ipv4->updateIpSrc(new_src_ip);
+
+                // Increment GTP-U TEID
+                if ( CGlobalInfo::m_options.m_teid_increment != 0 )
+                {
+                    // std::pair<uint32_t, uint32_t> key = std::make_pair(new_src_ip, new_dst_ip);
+                    // std::map<std::pair<uint32_t, uint32_t>, uint32_t>::iterator pos = CGlobalInfo::m_options.m_teid_map.find(key);
+                    // if (pos != CGlobalInfo::m_options.m_teid_map.end())
+                    // {
+                    //     memcpy(p + ip_offset -4, &(pos->second), 4); 
+                    // }
+                    // else{
+                    //     uint32_t teid = PKT_HTONL(*(uint32_t*)(p + ip_offset -4));
+                    //     //teid+=m_pkt_indication.m_teid_increment*m_pkt_indication.m_flow_number;
+                    //     teid+=CGlobalInfo::m_options.m_teid_increment*m_pkt_indication.m_flow_number;
+                    //     m_pkt_indication.m_flow_number++;
+                    //     teid=PKT_NTOHL(teid);
+                    //     memcpy(p + ip_offset -4, &teid, 4);
+                    //     CGlobalInfo::m_options.m_teid_map[key] = teid;
+                    // }
+                     uint32_t teid = PKT_HTONL(*(uint32_t*)(p + ip_offset -4));
+                     teid+=(new_src_ip - start_ip)*CGlobalInfo::m_options.m_teid_increment % total_ip;
+                     teid=PKT_NTOHL(teid);
+                     memcpy(p + ip_offset -4, &teid, 4);
+
+                }
             }
             if ( likely(!keep_dst_ip) ) {
-                new_ip = is_client_dir ? node->m_dest_ip : node->m_src_ip;
-                ipv4->updateIpDst(new_ip);
+                new_src_ip = is_client_dir ? node->m_dest_ip : node->m_src_ip;
+                ipv4->updateIpDst(new_src_ip);
             }
 
 #ifdef NAT_TRACE_

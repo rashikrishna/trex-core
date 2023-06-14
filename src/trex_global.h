@@ -560,6 +560,12 @@ public:
 public:
 
     void reset() {
+        m_teid_increment = 0;
+        m_teid_map.clear();
+        m_min_server_ip = UINT32_MAX;
+        m_min_client_ip = UINT32_MAX;
+        m_total_server_ip = 0;
+        m_total_client_ip = 0;
         preview.clean();
         m_tw_buckets = 1024;
         m_tw_levels = 3;
@@ -634,6 +640,12 @@ public:
         reset();
     }
     /* IMPORTANT! Every new cold member in this class must be added at the bottom, otherwise performance issue may occur */
+    std::map<std::pair<uint32_t, uint32_t>, uint32_t> m_teid_map;
+    uint32_t        m_teid_increment;
+    uint32_t        m_min_server_ip;
+    uint32_t        m_min_client_ip;
+    uint32_t        m_total_server_ip;
+    uint32_t        m_total_client_ip;
     CPreviewMode    preview;
     uint16_t        m_tw_buckets;
     uint16_t        m_tw_levels;
