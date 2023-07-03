@@ -107,6 +107,7 @@ public:
     void build();
     void transmit();
     void cleanup();
+    void remove();
     void all_dp_cores_finished(bool partial=false);
     void dp_core_finished();
     void dp_core_finished_partial();
@@ -174,6 +175,8 @@ private:
     std::vector<Json::Value> m_flows_info;
     uint64_t        m_flows_limit;
     uint64_t        m_flows_index;
+
+    bool            m_process_at_cp;    // temporary keep
 };
 
 

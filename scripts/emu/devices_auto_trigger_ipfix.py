@@ -1,8 +1,9 @@
 import argparse
-from emu.avc_ipfix_generators import AVCGenerators
-from emu.ipfix_profile import *
+from trex.emu.trex_emu_ipfix_generators import AVCGenerators
+from trex.emu.trex_emu_ipfix_profile import *
 from trex.emu.api import *
 
+DEBUG = False
 
 class AVCProfiles:
     def __init__(self):
@@ -96,15 +97,18 @@ class Prof1:
         parser.add_argument("--device-ipv4", type=str, default="1.1.1.3", dest="device_ipv4", help="IPv4 address of the first device to be generated")
         parser.add_argument("--devices-num", type=int, default=1, dest="devices_num", help="Number of devices to generate")
         parser.add_argument("--rampup-time", type=str, default=None, dest="rampup_time", help="The time duration over which the devices should be generated")
-        parser.add_argument("--sites-per-tenant", type=str, default=None, dest="sites_per_tenant", help="Number of sites per tenant")
-        parser.add_argument("--devices-per-site", type=str, default=None, dest="devices_per_site", help="Number of devices per site")
+        parser.add_argument("--sites-per-tenant", type=int, default=None, dest="sites_per_tenant", help="Number of sites per tenant")
+        parser.add_argument("--devices-per-site", type=int, default=None, dest="devices_per_site", help="Number of devices per site")
         parser.add_argument("--total-rate-pps", type=int, default=None, dest="total_rate_pps", help="The total rate (pps) in which all devices export IPFIX packets")
         parser.add_argument("--max-template-records", type=int, default=None, dest="max_template_records", help="Max template records to send. Value of 0 means no limit")
         parser.add_argument("--max-data-records", type=int, default=None, dest="max_data_records", help="Max data records to send. Value of 0 means no limit")
         parser.add_argument("--exporter-max-interval", type=str, default=None, dest="exporter_max_interval", help="HTTP exporter max interval to wait between two consecutive posts")
         parser.add_argument("--exporter-max-size", type=int, default=None, dest="exporter_max_size", help="HTTP exporter max size of files to export")
         parser.add_argument("--exporter-max-posts", type=int, default=None, dest="exporter_max_posts", help="HTTP exporter max posts to export")
-        parser.add_argument("--exporter-store-exported-files-on-disk", type=bool, default=None, dest="exporter_store_exported_files_on_disk", help="HTTP exporter store exported files on disk")
+        parser.add_argument('--exporter-compressed', default=None, dest="exporter_compressed", action=argparse.BooleanOptionalAction, help="HTTP exporter store exported files on disk")
+        parser.add_argument('--exporter-store-exported-files-on-disk', default=None, dest="exporter_store_exported_files_on_disk", action=argparse.BooleanOptionalAction, help="HTTP exporter store exported files on disk")
+        parser.add_argument('--exporter-repeats-num', type=int, default=None, dest="exporter_repeats_num", help="HTTP exporter number of times to repeat each export")
+        parser.add_argument('--exporter-repeats-wait-time', type=str, default=None, dest="exporter_repeats_wait_time", help="HTTP exporter time to wait between file export repeats")
 
         args = parser.parse_args(tuneables)
 
@@ -113,7 +117,10 @@ class Prof1:
             exporter_params.set_max_interval(args.exporter_max_interval)
             exporter_params.set_max_size(args.exporter_max_size)
             exporter_params.set_max_posts(args.exporter_max_posts)
+            exporter_params.set_compress(args.exporter_compressed)
             exporter_params.set_store_exported_files_on_disk(args.exporter_store_exported_files_on_disk)
+            exporter_params.set_repeats_num(args.exporter_repeats_num)
+            exporter_params.set_repeats_wait_time(args.exporter_repeats_wait_time) 
 
         self.register_profiles(
             args.dst_url,
@@ -126,7 +133,7 @@ class Prof1:
         if args.domain_id not in domain_ids:
             raise TRexError("Invalid domain id {}. Domain id should be in {}".format(args.domain_id, domain_ids))
 
-        return self.avc_profiles.get_devices_auto_trigger_profile(
+        profile = self.avc_profiles.get_devices_auto_trigger_profile(
             args.domain_id, 
             device_mac = args.device_mac,
             device_ipv4 = args.device_ipv4,
@@ -136,6 +143,11 @@ class Prof1:
             devices_per_site = args.devices_per_site,
             total_rate_pps = args.total_rate_pps
         ).get_profile()
+
+        if DEBUG:
+            print(profile.dump_json())
+
+        return profile
 
 def register():
     return Prof1()

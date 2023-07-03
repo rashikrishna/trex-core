@@ -555,9 +555,13 @@ CEmulAppCmd* CEmulApp::process_cmd_one(CEmulAppCmd * cmd){
 
     case tcTX_PKT : 
         {
-           m_state=te_NONE;
-           m_api->send_pkt((CUdpFlow *)m_flow,cmd->u.m_tx_pkt.m_buf);
-           return next_cmd();
+            m_state=te_NONE;
+            if (get_emul_addon()) {
+                get_emul_addon()->send_data(this, cmd->u.m_tx_pkt.m_buf);
+            } else {
+                m_api->send_pkt((CUdpFlow *)m_flow, cmd->u.m_tx_pkt.m_buf);
+            }
+            return next_cmd();
         }
         break;
 
@@ -716,13 +720,17 @@ void CEmulApp::start(bool interrupt){
     /* there is at least one command */
     set_interrupt(interrupt);
     assert(m_program->get_size()>0);
-    if (!is_udp_flow()) {
+    if (unlikely(get_emul_addon())) {
+        m_addon_sts = m_pctx->m_appstat.m_addon_stats.get_addon_sts(m_flow->m_tg_id, get_emul_addon());
+        setup_emul_addon();
+    }
+    if (m_program->is_stream()) {
         m_q.set_window_size(m_api->get_tx_max_space(m_flow));
     }
     CEmulAppCmd * lpcmd=m_program->get_index(m_cmd_index);
     /* inject implicit TCP accept to avoid issue #604 */
     CEmulAppCmd temp_cmd;
-    if (!is_udp_flow() && !m_pctx->m_ctx->is_client_side() && (lpcmd->m_cmd == tcTX_BUFFER)) {
+    if (m_program->is_stream() && !m_pctx->m_ctx->is_client_side() && (lpcmd->m_cmd == tcTX_BUFFER)) {
         temp_cmd.m_cmd = tcCONNECT_WAIT;
         lpcmd = &temp_cmd;
         --m_cmd_index;  // rewind index for next_cmd()
@@ -1100,24 +1108,59 @@ int utl_mbuf_buffer_create_and_copy(uint8_t socket,
 }
 
 
+/*
+ * The mbuf filled with patterns can be cached for other buffers.
+ * It will reduce 2K mbuf usage when lots of buffers are loaded.
+ * To avoid the 16bit refcnt overflow, const-mbuf is used.
+ * The const-mbuf could not be freed because it will stay in the driver's TX descriptor.
+ * In general, the number of cached mbufs is small and has no issue.
+ */
+#define MAX_MBUF_CACHE  32
+static std::map<std::string,rte_mbuf_t*> mbufs_cached[MAX_SOCKETS_SUPPORTED];
+static std::mutex mbufs_cached_mutex[MAX_SOCKETS_SUPPORTED];
+
+static rte_mbuf_t* get_mbuf_cached(uint8_t socket, std::string& fstring) {
+    if (CGlobalInfo::m_do_mbuf_cache) {
+        std::unique_lock<std::mutex> my_lock(mbufs_cached_mutex[socket]);
+
+        auto it = mbufs_cached[socket].find(fstring);
+        if (it != mbufs_cached[socket].end()) {
+            return it->second;
+        }
+    }
+    return nullptr;
+}
+
+static void set_mbuf_cached(uint8_t socket, std::string& fstring, rte_mbuf_t* mbuf) {
+    if (CGlobalInfo::m_do_mbuf_cache && (mbufs_cached[socket].size() < MAX_MBUF_CACHE)) {
+        std::unique_lock<std::mutex> my_lock(mbufs_cached_mutex[socket]);
+
+        if (mbufs_cached[socket].find(fstring) == mbufs_cached[socket].end()) {
+            mbufs_cached[socket][fstring] = mbuf;
+            rte_mbuf_set_as_core_const(mbuf);
+        }
+    }
+}
+
+
 int utl_mbuf_buffer_create_and_copy(uint8_t socket,
                                     CMbufBuffer * buf,
                                     uint32_t blk_size,
                                     uint8_t *d,
                                     uint32_t d_size,
                                     uint32_t size,
-                                    uint8_t *f,
-                                    uint32_t f_size,
+                                    std::string& fill_string,
                                     bool mbuf_const){
 
     buf->Create(blk_size);
     uint8_t cnt = 0;
-    rte_mbuf_t* mbuf_fill = nullptr;
+    rte_mbuf_t* mbuf_fill = get_mbuf_cached(socket, fill_string);
+
     while (size>0) {
         uint32_t alloc_size = bsd_umin(blk_size,size);
         auto copy_size = bsd_umin(d_size, alloc_size);
         rte_mbuf_t* m;
-        if (mbuf_fill && (alloc_size == blk_size)) {
+        if (!copy_size && mbuf_fill && (alloc_size == blk_size)) {
             m = mbuf_fill;
             rte_mbuf_refcnt_update(m, 1);
         } else {
@@ -1131,7 +1174,14 @@ int utl_mbuf_buffer_create_and_copy(uint8_t socket,
                 d_size -= copy_size;
             } else if (!mbuf_fill) {
                 mbuf_fill = m; // filled data reference mbuf
+                if (alloc_size == blk_size) {
+                    set_mbuf_cached(socket, fill_string, mbuf_fill);
+                }
             }
+
+            uint8_t* f = (uint8_t*)fill_string.c_str();
+            uint32_t f_size = fill_string.size();
+
             for (auto i = 0; i < (alloc_size-copy_size); i++ ) {
                 *p = (f_size>0) ? f[cnt%f_size]: cnt;
                 cnt++;
@@ -1311,4 +1361,7 @@ void CAppStats::AddStatsVal(uint16_t tg_id, const uint8_t id, const uint64_t val
         counter_p[id] += val;
     }
 }
+
+
+std::vector<CEmulAddon*> CEmulAddonList::m_addon_list;
 

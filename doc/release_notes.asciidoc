@@ -26,6 +26,19 @@ ifdef::backend-docbook[]
 
 endif::backend-docbook[]
 
+== Release 3.03 ==
+
+* minor bug fixes 
+
+== Release 3.02 ==
+* minor change, build issue with 3.01 for mlx5 driver 
+
+== Release 3.01 ==
+
+* DPDK 
+** mlx5 upgrade to new ofed 
+** XL710 bonding fix 
+
 == Release 3.00 ==
 
 * EMU 
@@ -417,7 +430,7 @@ Minor version
 * ASTF keep-alive packet is with ACK bit on
 * STL 
 ** fix Python exception in case of a huge latency packets drop 
-** Support Intel X722 NIC with new firware 
+** Support Intel X722 NIC with new firmware 
 
 == Release 2.60 ==
 

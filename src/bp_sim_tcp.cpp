@@ -49,6 +49,8 @@ public:
              struct CTcpCb * tp,
              rte_mbuf_t *m);
 
+   void on_flush_tx();
+
    int on_flow_close(CTcpPerThreadCtx *ctx,
                      CFlowBase * flow);
 
@@ -99,6 +101,10 @@ int CTcpIOCb::on_redirect_rx(CTcpPerThreadCtx *ctx,
                                rte_mbuf_t *m){
     pkt_dir_t   dir = ctx->m_ft.is_client_side()?CLIENT_SIDE:SERVER_SIDE;
     return(m_p->m_node_gen.m_v_if->redirect_to_rx_core(dir,m)?0:-1);
+}
+
+void CTcpIOCb::on_flush_tx(){
+    m_p->m_node_gen.m_v_if->flush_tx_queue();
 }
 
 int CTcpIOCb::on_tx(CTcpPerThreadCtx *ctx,
@@ -390,6 +396,7 @@ static CEmulAppApiUdpImpl  m_udp_bh_api_impl_c;
 
 #ifndef TREX_SIM
 uint16_t get_client_side_vlan(CVirtualIF * _ifs);
+tunnel_cfg_data_t get_client_side_tunnel_cfg_data(CVirtualIF * _ifs);
 #endif
 void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id, CFlowBase* in_flow){
 
@@ -445,17 +452,16 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
 
     ClientCfgBase * lpc=tuple.getClientCfg();
 
-    uint16_t vlan=0;
+    tunnel_cfg_data_t tunnel_data;
 
     if (lpc) {
         if (lpc->m_initiator.has_vlan()){
-            vlan=lpc->m_initiator.get_vlan();
+            tunnel_data.m_vlan = lpc->m_initiator.get_vlan();
         }
     }else{
-        if ( unlikely(CGlobalInfo::m_options.preview.get_vlan_mode() == CPreviewMode::VLAN_MODE_NORMAL) ) {
-     /* TBD need to fix , should be taken from right port */
+        if ( unlikely(CGlobalInfo::m_options.preview.get_vlan_mode() != CPreviewMode::VLAN_MODE_NONE) ) {
     #ifndef TREX_SIM
-            vlan= get_client_side_vlan(m_node_gen.m_v_if);
+            tunnel_data = get_client_side_tunnel_cfg_data(m_node_gen.m_v_if);
     #endif
         }
     }
@@ -478,7 +484,7 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
                                                tuple.getClientPort(),
                                                tuple.getServerPort(),
 
-                                               vlan,
+                                               tunnel_data,
                                                is_ipv6,
                                                tuple.getTunnelCtx(),
                                                true,
@@ -490,7 +496,7 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
                                           tuple.getServer(),
                                           tuple.getClientPort(),
                                           tuple.getServerPort(),
-                                          vlan,
+                                          tunnel_data,
                                           is_ipv6,
                                           tuple.getTunnelCtx(),
                                           tg_id,
@@ -556,9 +562,11 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
 
     app_c = &c_flow->m_app;
 
+    app_c->set_program(cur_tmp_ro->get_client_prog(template_id));
+    app_c->set_peer_id(cur_tmp_ro->get_template_server_id(template_id));
+
     if (is_udp){
         CUdpFlow * udp_flow=(CUdpFlow*)c_flow;;
-        app_c->set_program(cur_tmp_ro->get_client_prog(template_id));
         app_c->set_bh_api(&m_udp_bh_api_impl_c);
         app_c->set_udp_flow_ctx(udp_flow->m_pctx,udp_flow);
         app_c->set_udp_flow();
@@ -576,7 +584,6 @@ void CFlowGenListPerThread::generate_flow(CPerProfileCtx * pctx, uint16_t _tg_id
 
     }else{
         CTcpFlow * tcp_flow=(CTcpFlow*)c_flow;
-        app_c->set_program(cur_tmp_ro->get_client_prog(template_id));
         app_c->set_bh_api(&m_tcp_bh_api_impl_c);
         app_c->set_flow_ctx(tcp_flow->m_pctx,tcp_flow);
         if (CGlobalInfo::m_options.preview.getEmulDebug() ){
@@ -849,12 +856,12 @@ void CFlowGenListPerThread::unload_tcp_profile(profile_id_t profile_id, bool is_
 
     if (astf_db) {
         astf_db->clear_db_ro_rw(nullptr, m_thread_id);
-
-        m_c_tcp->set_template_ro(nullptr, profile_id);
-        m_c_tcp->set_template_rw(nullptr, profile_id);
-        m_s_tcp->set_template_ro(nullptr, profile_id);
-        m_s_tcp->set_template_rw(nullptr, profile_id);
     }
+
+    m_c_tcp->set_template_ro(nullptr, profile_id);
+    m_c_tcp->set_template_rw(nullptr, profile_id);
+    m_s_tcp->set_template_ro(nullptr, profile_id);
+    m_s_tcp->set_template_rw(nullptr, profile_id);
 
     if (is_last) {
         m_sched_accurate = false;
