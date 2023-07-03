@@ -4851,6 +4851,14 @@ void CGlobalTRex::get_stats(CGlobalStats & stats){
             total_sockets   += lpt->m_smart_gen.MaxSockets();
         }
 
+        // In ASTF mode the clients and server numbers are stored in CAstfDb
+        if (get_is_tcp_mode())
+        {
+            CTupleGeneratorSmart *smart_gen = CAstfDB::instance()->get_smart_gen(lpt->m_thread_id);
+            total_clients += smart_gen->getTotalClients();
+            total_servers += smart_gen->getTotalServers();
+        }
+
         total_nat_time_out +=lpt->m_stats.m_nat_flow_timeout;
         total_nat_time_out_wait_ack += lpt->m_stats.m_nat_flow_timeout_wait_ack;
         total_nat_no_fid   +=lpt->m_stats.m_nat_lookup_no_flow_id ;
