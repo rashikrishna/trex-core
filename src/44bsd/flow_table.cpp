@@ -494,9 +494,7 @@ void       CFlowTable::generate_rst_pkt(CPerProfileCtx * pctx,
                                  dst_port,
                                  tunnel_data,
                                  is_ipv6,
-                                 NULL,
-                                 0,
-                                 0);
+                                 NULL);
     if (flow==0) {
         return;
     }
@@ -1330,6 +1328,5 @@ HOT_FUNC bool CFlowTable::rx_handle_packet(CTcpPerThreadCtx * ctx,
         return (rx_handle_packet_tcp_no_flow(ctx,mbuf,lpflow,parser,tuple,ftuple,hash,port_id));
     }
 }
-
 
 
